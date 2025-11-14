@@ -12,9 +12,11 @@ import br.edu.ibmec.exception.RegraDeNegocioException;
 import br.edu.ibmec.repository.AlunoRepository;
 import br.edu.ibmec.repository.InscricaoRepository;
 import br.edu.ibmec.repository.TurmaRepository;
+import br.edu.ibmec.service.strategy.CalculoAprovacaoStrategy;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDate;
+import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 public class InscricaoService {
@@ -23,49 +25,51 @@ public class InscricaoService {
     private final AlunoRepository alunoRepository;
     private final TurmaRepository turmaRepository;
 
-    private static final String SITUACAO_PENDENTE = "PENDENTE";
-    private static final String SITUACAO_APROVADO = "APROVADO";
-    private static final String SITUACAO_REPROVADO_POR_NOTA = "REPROVADO POR NOTA";
-    private static final String SITUACAO_REPROVADO_POR_FALTA = "REPROVADO POR FALTA";
 
-    public InscricaoService(InscricaoRepository inscricaoRepository, AlunoRepository alunoRepository, TurmaRepository turmaRepository) {
+    private final CalculoAprovacaoStrategy situacaoStrategy;
+
+
+    public InscricaoService(InscricaoRepository inscricaoRepository, AlunoRepository alunoRepository,
+                            TurmaRepository turmaRepository, CalculoAprovacaoStrategy situacaoStrategy) {
         this.inscricaoRepository = inscricaoRepository;
         this.alunoRepository = alunoRepository;
         this.turmaRepository = turmaRepository;
+        this.situacaoStrategy = situacaoStrategy;
+    }
+
+    public List<InscricaoResponseDTO> listarInscricoes() {
+        return inscricaoRepository.findAll().stream()
+                .map(InscricaoResponseDTO::fromEntity)
+                .collect(Collectors.toList());
     }
 
     public InscricaoResponseDTO buscarInscricao(String alunoMatricula, String turmaCodigo) {
         InscricaoId id = new InscricaoId(alunoMatricula, turmaCodigo);
-        return inscricaoRepository.findById(id)
-                .map(InscricaoResponseDTO::fromEntity)
-                .orElseThrow(() -> new EntidadeNaoEncontradaException("Inscrição não encontrada para o Aluno " + alunoMatricula + " na Turma " + turmaCodigo + "."));
+        Inscricao inscricao = inscricaoRepository.findById(id)
+                .orElseThrow(() -> new EntidadeNaoEncontradaException("Inscrição não encontrada."));
+        return InscricaoResponseDTO.fromEntity(inscricao);
     }
 
     public InscricaoResponseDTO realizarInscricao(InscricaoRequestDTO requestDTO) {
-        String matricula = requestDTO.getAlunoMatricula();
-        String turmaCodigo = requestDTO.getTurmaCodigo();
+        Aluno aluno = alunoRepository.findById(requestDTO.getAlunoMatricula())
+                .orElseThrow(() -> new EntidadeNaoEncontradaException("Aluno com matrícula " + requestDTO.getAlunoMatricula() + " não encontrado."));
+        Turma turma = turmaRepository.findById(requestDTO.getTurmaCodigo())
+                .orElseThrow(() -> new EntidadeNaoEncontradaException("Turma com código " + requestDTO.getTurmaCodigo() + " não encontrada."));
 
-        Aluno aluno = alunoRepository.findById(matricula)
-                .orElseThrow(() -> new EntidadeNaoEncontradaException("Aluno com matrícula " + matricula + " não encontrado."));
-
-        Turma turma = turmaRepository.findById(turmaCodigo)
-                .orElseThrow(() -> new EntidadeNaoEncontradaException("Turma com código " + turmaCodigo + " não encontrada."));
-
-        InscricaoId id = new InscricaoId(matricula, turmaCodigo);
-        if (inscricaoRepository.existsByAlunoMatriculaAndTurmaCodigo(matricula, turmaCodigo)) {
-            throw new RegraDeNegocioException("O aluno " + matricula + " já está inscrito na turma " + turmaCodigo + ".");
+        // Cria a chave composta e verifica unicidade
+        InscricaoId id = new InscricaoId(requestDTO.getAlunoMatricula(), requestDTO.getTurmaCodigo());
+        if (inscricaoRepository.existsById(id)) {
+            throw new RegraDeNegocioException("O aluno " + aluno.getNome() + " já está inscrito na turma " + turma.getCodigo() + ".");
         }
 
-        Inscricao novaInscricao = Inscricao.builder()
-                .id(id)
-                .aluno(aluno)
-                .turma(turma)
-                .situacao(SITUACAO_PENDENTE)
-                .build();
+        Inscricao inscricao = new Inscricao();
+        inscricao.setId(id);
+        inscricao.setAluno(aluno);
+        inscricao.setTurma(turma);
+        inscricao.setSituacao("PENDENTE"); // Situação inicial
 
-        inscricaoRepository.save(novaInscricao);
-
-        return InscricaoResponseDTO.fromEntity(novaInscricao);
+        inscricaoRepository.save(inscricao);
+        return InscricaoResponseDTO.fromEntity(inscricao);
     }
 
     public InscricaoResponseDTO atualizarNotasESituacao(String alunoMatricula, String turmaCodigo, InscricaoUpdateDTO updateDTO) {
@@ -73,32 +77,28 @@ public class InscricaoService {
         Inscricao inscricao = inscricaoRepository.findById(id)
                 .orElseThrow(() -> new EntidadeNaoEncontradaException("Inscrição não encontrada para o Aluno " + alunoMatricula + " na Turma " + turmaCodigo + "."));
 
-
-        if (updateDTO.getAvaliacao1() == null || updateDTO.getAvaliacao1() < 0 || updateDTO.getAvaliacao1() > 10 ||
-                updateDTO.getAvaliacao2() == null || updateDTO.getAvaliacao2() < 0 || updateDTO.getAvaliacao2() > 10) {
-            throw new RegraDeNegocioException("As notas devem ser entre 0 e 10.");
+        if (updateDTO.getAvaliacao1() != null && (updateDTO.getAvaliacao1() < 0 || updateDTO.getAvaliacao1() > 10)) {
+            throw new RegraDeNegocioException("A Avaliação 1 deve estar entre 0 e 10.");
         }
-        if (updateDTO.getNumFaltas() == null || updateDTO.getNumFaltas() < 0) {
+        if (updateDTO.getAvaliacao2() != null && (updateDTO.getAvaliacao2() < 0 || updateDTO.getAvaliacao2() > 10)) {
+            throw new RegraDeNegocioException("A Avaliação 2 deve estar entre 0 e 10.");
+        }
+        if (updateDTO.getNumFaltas() != null && updateDTO.getNumFaltas() < 0) {
             throw new RegraDeNegocioException("O número de faltas não pode ser negativo.");
         }
-
 
         inscricao.setAvaliacao1(updateDTO.getAvaliacao1());
         inscricao.setAvaliacao2(updateDTO.getAvaliacao2());
         inscricao.setNumFaltas(updateDTO.getNumFaltas());
 
-
-        Float media = ((inscricao.getAvaliacao1() + inscricao.getAvaliacao2()) / 2.0f);
+        // --- Cálculo da Média ---
+        Float media = 0.0f;
+        if (inscricao.getAvaliacao1() != null && inscricao.getAvaliacao2() != null) {
+            media = (float) ((inscricao.getAvaliacao1() + inscricao.getAvaliacao2()) / 2.0);
+        }
         inscricao.setMedia(media);
 
-
-        if (inscricao.getNumFaltas() != null && inscricao.getNumFaltas() > 10) {
-            inscricao.setSituacao(SITUACAO_REPROVADO_POR_FALTA);
-        } else if (media >= 7.0) {
-            inscricao.setSituacao(SITUACAO_APROVADO);
-        } else {
-            inscricao.setSituacao(SITUACAO_REPROVADO_POR_NOTA);
-        }
+        situacaoStrategy.calcular(inscricao, media);
 
         inscricaoRepository.save(inscricao);
 
@@ -108,12 +108,9 @@ public class InscricaoService {
 
     public void cancelarInscricao(String alunoMatricula, String turmaCodigo) {
         InscricaoId id = new InscricaoId(alunoMatricula, turmaCodigo);
-
         if (!inscricaoRepository.existsById(id)) {
-            throw new EntidadeNaoEncontradaException(
-                    "Inscrição não encontrada para o Aluno " + alunoMatricula + " na Turma " + turmaCodigo + " para remoção.");
+            throw new EntidadeNaoEncontradaException("Inscrição não encontrada para cancelamento.");
         }
-
         inscricaoRepository.deleteById(id);
     }
 }
