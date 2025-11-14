@@ -3,7 +3,6 @@ package br.edu.ibmec.service;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import br.edu.ibmec.dao.UniversidadeDAO;
 import br.edu.ibmec.dto.AlunoRequestDTO;
 import br.edu.ibmec.dto.CursoDTO;
 import br.edu.ibmec.entity.Aluno;
@@ -19,7 +18,7 @@ public class CursoService {
 	private CursoRepository cursoRepository;
 
 	public CursoService(CursoRepository cursoRepository) {
-		this.cursoRepository = cursoRepository;
+        this.cursoRepository = cursoRepository;
 	}
 
     public CursoDTO buscarCurso(int codigo) {
@@ -42,6 +41,8 @@ public class CursoService {
         }
 
         Curso novoCurso = new Curso();
+
+        novoCurso.setCodigo(cursoDTO.getCodigo());
 
         atualizarEntidadeComDTO(novoCurso, cursoDTO);
 
@@ -72,15 +73,19 @@ public class CursoService {
     }
 
     private void validarCurso(CursoDTO cursoDTO) {
-        if (cursoDTO.getCodigo() < 1 || cursoDTO.getCodigo() > 9999) {
+        if (cursoDTO.getCodigo()  < 1 || cursoDTO.getCodigo() > 9999) {
             throw new RegraDeNegocioException("O código do curso é inválido.");
         }
         if (cursoDTO.getNome() == null || cursoDTO.getNome().trim().isEmpty()) {
             throw new RegraDeNegocioException("O nome do curso não pode ser vazio.");
         }
+        if (cursoDTO.getValorBaseDisciplina() == null || cursoDTO.getValorBaseDisciplina() <= 0.0f) {
+            throw new RegraDeNegocioException("O valor base da disciplina deve ser informado e ser maior que zero.");
+        }
     }
 
     private void atualizarEntidadeComDTO(Curso curso, CursoDTO cursoDTO) {
         curso.setNome(cursoDTO.getNome());
+        curso.setValorBaseDisciplina(cursoDTO.getValorBaseDisciplina());
     }
 }

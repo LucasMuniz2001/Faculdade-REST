@@ -29,6 +29,12 @@ public class AlunoResource {
         return ResponseEntity.ok(alunoResponseDTO);
     }
 
+    @GetMapping(path = "/{matricula}/mensalidade")
+    public ResponseEntity<Float> calcularMensalidade(@PathVariable String matricula) {
+        Float mensalidade = alunoService.calcularMensalidade(matricula);
+        return ResponseEntity.ok(mensalidade);
+    }
+
     @PostMapping()
     public ResponseEntity<AlunoResponseDTO> cadastrarAluno(@RequestBody AlunoRequestDTO alunoRequestDTO) {
         AlunoResponseDTO alunoSalvo = alunoService.cadastrarAluno(alunoRequestDTO);

@@ -8,6 +8,7 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
 import java.time.Period;
+import java.util.ArrayList;
 import java.util.List;
 
 @Data
@@ -15,10 +16,10 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
-public class Aluno {
+public class Professor {
 
     @Id
-	private String matricula;
+    private String matricula;
 
     @Column(name = "nome")
     private String nome;
@@ -32,21 +33,8 @@ public class Aluno {
     @Column(name = "matricula_ativa")
     private boolean matriculaAtiva;
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "estado_civil")
-    private EstadoCivil estadoCivil;
-
-    @ElementCollection
-    @CollectionTable(name="aluno_telefones", joinColumns=@JoinColumn(name="aluno_matricula"))
-    @Column(name="telefone")
-    private List<String> telefones;
-
-    @ManyToOne()
-    @JoinColumn(name = "codigo")
-	private Curso curso;
-
-    @OneToMany(mappedBy = "aluno")
-    private List<Inscricao> inscricoes;
+    @OneToMany(mappedBy = "professor")
+    private List<Turma> turmas = new ArrayList<>();
 
     public int getIdade() {
         if (this.dataNascimento != null) {

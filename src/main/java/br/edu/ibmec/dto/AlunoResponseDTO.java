@@ -25,7 +25,6 @@ public class AlunoResponseDTO {
         dto.setMatriculaAtiva(aluno.isMatriculaAtiva());
         dto.setTelefones(aluno.getTelefones());
         dto.setCurso(aluno.getCurso().getCodigo());
-
         return dto;
     }
 

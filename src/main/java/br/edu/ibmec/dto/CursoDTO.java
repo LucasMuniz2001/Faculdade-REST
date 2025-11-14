@@ -11,11 +11,13 @@ import lombok.NoArgsConstructor;
 public class CursoDTO {
     private int codigo;
     private String nome;
+    private Float valorBaseDisciplina;
 
     public static CursoDTO fromEntity(Curso curso) {
         CursoDTO dto = new CursoDTO();
         dto.setCodigo(curso.getCodigo());
         dto.setNome(curso.getNome());
+        dto.setValorBaseDisciplina(curso.getValorBaseDisciplina());
         return dto;
     }
 }

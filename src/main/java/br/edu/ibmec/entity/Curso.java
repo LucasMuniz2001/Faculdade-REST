@@ -18,12 +18,18 @@ import java.util.List;
 public class Curso {
 
     @Id
-	@Column (name = "codigo")
+	    @Column (name = "codigo")
     private Integer codigo;
 
     @Column (name = "nome")
     private String nome;
 
-    @OneToMany(mappedBy = "curso", cascade = CascadeType.ALL)
+    @Column (name = "valor_base_disciplina")
+    private Float valorBaseDisciplina;
+
+    @OneToMany(mappedBy = "curso")
     private List<Aluno> alunos = new ArrayList<>();
+
+    @OneToMany(mappedBy = "curso")
+    private List<Disciplina> disciplinas = new ArrayList<>();
 }

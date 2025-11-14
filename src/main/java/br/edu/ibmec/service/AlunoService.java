@@ -1,20 +1,21 @@
 package br.edu.ibmec.service;
 
 import java.time.LocalDate;
-import java.time.Period;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.concurrent.ThreadLocalRandom;
 
-import br.edu.ibmec.dao.UniversidadeDAO;
+
 import br.edu.ibmec.dto.AlunoResponseDTO;
 import br.edu.ibmec.dto.AlunoRequestDTO;
 import br.edu.ibmec.dto.EstadoCivilDTO;
 import br.edu.ibmec.entity.Aluno;
 import br.edu.ibmec.entity.Curso;
 import br.edu.ibmec.entity.EstadoCivil;
+import br.edu.ibmec.entity.Inscricao;
 import br.edu.ibmec.repository.AlunoRepository;
 import br.edu.ibmec.repository.CursoRepository;
+import br.edu.ibmec.repository.InscricaoRepository;
 import org.springframework.stereotype.Service;
 
 import br.edu.ibmec.exception.RegraDeNegocioException;
@@ -24,11 +25,41 @@ import br.edu.ibmec.exception.EntidadeNaoEncontradaException;
 public class AlunoService {
 	private AlunoRepository alunoRepository;
     private CursoRepository cursoRepository;
+    private InscricaoRepository inscricaoRepository;
+
 
     public AlunoService(AlunoRepository alunoRepository, CursoRepository cursoRepository) {
         this.alunoRepository = alunoRepository;
         this.cursoRepository = cursoRepository;
+        this.inscricaoRepository = inscricaoRepository;
     }
+
+    public Float calcularMensalidade(String matricula) {
+        Aluno aluno = alunoRepository.findById(matricula)
+                .orElseThrow(()-> new EntidadeNaoEncontradaException("Aluno com matrícula " + matricula + " não encontrado."));
+        List<Inscricao> inscricoes = aluno.getInscricoes();
+
+        if (inscricoes == null || inscricoes.isEmpty()) {
+            return 0.0f;
+        }
+
+        float valorTotal = (float) inscricoes.stream()
+                .map(inscricao -> inscricao.getTurma().getDisciplina()) // Mapeia para a Disciplina
+                .distinct() // Garante que cada Disciplina seja contada apenas uma vez
+                .mapToDouble(disciplina -> {
+                    // Pega o Curso pai da Disciplina para obter o valor
+                    Curso cursoDaDisciplina = disciplina.getCurso();
+                    if (cursoDaDisciplina == null || cursoDaDisciplina.getValorBaseDisciplina() == null) {
+                        return 0.0f;
+                    }
+                    return (float) cursoDaDisciplina.getValorBaseDisciplina();
+                })
+                .sum();
+
+        return valorTotal;
+    }
+
+
 
     public AlunoResponseDTO buscarAluno(String matricula) {
         return alunoRepository.findById(matricula)
@@ -89,7 +120,7 @@ public class AlunoService {
         aluno.setNome(alunoRequestDTO.getNome());
         aluno.setDataNascimento(alunoRequestDTO.getDataNascimento());
         aluno.setMatriculaAtiva(alunoRequestDTO.isMatriculaAtiva());
-
+        aluno.setTelefones(alunoRequestDTO.getTelefones());
 
         EstadoCivil estadoCivil = converterEstadoCivil(alunoRequestDTO.getEstadoCivil());
         aluno.setEstadoCivil(estadoCivil);
