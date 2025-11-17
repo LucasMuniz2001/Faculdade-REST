@@ -13,6 +13,7 @@ public class AlunoResponseDTO {
     private LocalDate dataNascimento;
     private int idade;
     private boolean matriculaAtiva;
+    private Float bolsaPorcentagem;
     private List<String> telefones;
     private int curso;
 
@@ -23,6 +24,7 @@ public class AlunoResponseDTO {
         dto.setDataNascimento(aluno.getDataNascimento());
         dto.setIdade(aluno.getIdade());
         dto.setMatriculaAtiva(aluno.isMatriculaAtiva());
+        dto.setBolsaPorcentagem(aluno.getBolsaPorcentagem());
         dto.setTelefones(aluno.getTelefones());
         dto.setCurso(aluno.getCurso().getCodigo());
         return dto;

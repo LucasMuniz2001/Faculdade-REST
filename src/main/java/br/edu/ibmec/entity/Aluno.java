@@ -26,6 +26,9 @@ public class Aluno {
     @Column(name = "data_nascimento")
     private LocalDate dataNascimento;
 
+    @Column(name = "bolsa_porcentagem")
+    private Float bolsaPorcentagem;
+
     @Transient
     private int idade;
 

@@ -6,7 +6,6 @@ import org.springframework.stereotype.Component;
 @Component
 public class AprovacaoPadraoStrategy implements CalculoAprovacaoStrategy {
 
-    private static final String SITUACAO_PENDENTE = "PENDENTE";
     private static final String SITUACAO_APROVADO = "APROVADO";
     private static final String SITUACAO_REPROVADO_POR_NOTA = "REPROVADO POR NOTA";
     private static final String SITUACAO_REPROVADO_POR_FALTA = "REPROVADO POR FALTA";

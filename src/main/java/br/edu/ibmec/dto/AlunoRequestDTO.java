@@ -21,6 +21,7 @@ import java.time.LocalDate;
 public class AlunoRequestDTO {
 	private String nome;
 	private LocalDate dataNascimento;
+    private Float bolsaPorcentagem;
 	private boolean matriculaAtiva;
 	private EstadoCivilDTO estadoCivil;
 	private List<String> telefones;

@@ -1,10 +1,10 @@
 package br.edu.ibmec.service;
 
 import java.time.LocalDate;
+import java.time.Period;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.concurrent.ThreadLocalRandom;
-
 
 import br.edu.ibmec.dto.AlunoResponseDTO;
 import br.edu.ibmec.dto.AlunoRequestDTO;
@@ -16,6 +16,9 @@ import br.edu.ibmec.entity.Inscricao;
 import br.edu.ibmec.repository.AlunoRepository;
 import br.edu.ibmec.repository.CursoRepository;
 import br.edu.ibmec.repository.InscricaoRepository;
+import br.edu.ibmec.service.strategy.CalculoMensalidadeStrategy;
+import br.edu.ibmec.service.strategy.MensalidadeSemBolsaStrategy;
+import br.edu.ibmec.service.strategy.MensalidadeComBolsaStrategy;
 import org.springframework.stereotype.Service;
 
 import br.edu.ibmec.exception.RegraDeNegocioException;
@@ -23,43 +26,23 @@ import br.edu.ibmec.exception.EntidadeNaoEncontradaException;
 
 @Service
 public class AlunoService {
-	private AlunoRepository alunoRepository;
+    private AlunoRepository alunoRepository;
     private CursoRepository cursoRepository;
     private InscricaoRepository inscricaoRepository;
 
+    private final MensalidadeSemBolsaStrategy semBolsaStrategy;
+    private final MensalidadeComBolsaStrategy comBolsaStrategy;
 
-    public AlunoService(AlunoRepository alunoRepository, CursoRepository cursoRepository) {
+    public AlunoService(AlunoRepository alunoRepository, CursoRepository cursoRepository,
+                        InscricaoRepository inscricaoRepository,
+                        MensalidadeSemBolsaStrategy semBolsaStrategy,
+                        MensalidadeComBolsaStrategy comBolsaStrategy) {
         this.alunoRepository = alunoRepository;
         this.cursoRepository = cursoRepository;
         this.inscricaoRepository = inscricaoRepository;
+        this.semBolsaStrategy = semBolsaStrategy;
+        this.comBolsaStrategy = comBolsaStrategy;
     }
-
-    public Float calcularMensalidade(String matricula) {
-        Aluno aluno = alunoRepository.findById(matricula)
-                .orElseThrow(()-> new EntidadeNaoEncontradaException("Aluno com matrícula " + matricula + " não encontrado."));
-        List<Inscricao> inscricoes = aluno.getInscricoes();
-
-        if (inscricoes == null || inscricoes.isEmpty()) {
-            return 0.0f;
-        }
-
-        float valorTotal = (float) inscricoes.stream()
-                .map(inscricao -> inscricao.getTurma().getDisciplina()) // Mapeia para a Disciplina
-                .distinct() // Garante que cada Disciplina seja contada apenas uma vez
-                .mapToDouble(disciplina -> {
-                    // Pega o Curso pai da Disciplina para obter o valor
-                    Curso cursoDaDisciplina = disciplina.getCurso();
-                    if (cursoDaDisciplina == null || cursoDaDisciplina.getValorBaseDisciplina() == null) {
-                        return 0.0f;
-                    }
-                    return (float) cursoDaDisciplina.getValorBaseDisciplina();
-                })
-                .sum();
-
-        return valorTotal;
-    }
-
-
 
     public AlunoResponseDTO buscarAluno(String matricula) {
         return alunoRepository.findById(matricula)
@@ -114,6 +97,9 @@ public class AlunoService {
         if (dto.getDataNascimento() == null) {
             throw new RegraDeNegocioException("A data de nascimento é obrigatória.");
         }
+        if (dto.getBolsaPorcentagem() != null && (dto.getBolsaPorcentagem() < 0.0f || dto.getBolsaPorcentagem() > 100.0f)) {
+            throw new RegraDeNegocioException("A porcentagem de bolsa deve ser entre 0 e 100.");
+        }
     }
 
     private void atualizarEntidadeComDTO(Aluno aluno, AlunoRequestDTO alunoRequestDTO) {
@@ -121,11 +107,12 @@ public class AlunoService {
         aluno.setDataNascimento(alunoRequestDTO.getDataNascimento());
         aluno.setMatriculaAtiva(alunoRequestDTO.isMatriculaAtiva());
         aluno.setTelefones(alunoRequestDTO.getTelefones());
+        aluno.setBolsaPorcentagem(alunoRequestDTO.getBolsaPorcentagem()); // Mapeamento da bolsa
 
         EstadoCivil estadoCivil = converterEstadoCivil(alunoRequestDTO.getEstadoCivil());
         aluno.setEstadoCivil(estadoCivil);
 
-        if (aluno.getCurso() == null || aluno.getCurso().getCodigo() != alunoRequestDTO.getCurso()) {
+        if (aluno.getCurso() == null || !aluno.getCurso().getCodigo().equals(alunoRequestDTO.getCurso())) {
             Curso novoCurso = cursoRepository.findById(alunoRequestDTO.getCurso())
                     .orElseThrow(() -> new RegraDeNegocioException("O curso com código " + alunoRequestDTO.getCurso() + " não foi encontrado."));
 
@@ -151,5 +138,44 @@ public class AlunoService {
             return null;
         }
         return EstadoCivil.valueOf(estadoCivilDTO.name());
+    }
+
+    // MÉTODO DE CÁLCULO DA MENSALIDADE (Contexto do Strategy)
+    public Float calcularMensalidade(String matricula) {
+        Aluno aluno = alunoRepository.findById(matricula)
+                .orElseThrow(() -> new EntidadeNaoEncontradaException("Aluno com matrícula " + matricula + " não encontrado."));
+
+        List<Inscricao> inscricoes = aluno.getInscricoes();
+
+        if (inscricoes == null || inscricoes.isEmpty()) {
+            return 0.0f;
+        }
+
+        // 1. Cálculo do valor base (Soma do valor de cada disciplina única)
+        Float valorBase = (float) inscricoes.stream()
+                .map(inscricao -> inscricao.getTurma().getDisciplina())
+                .distinct()
+                .mapToDouble(disciplina -> {
+                    Curso cursoDaDisciplina = disciplina.getCurso();
+                    if (cursoDaDisciplina == null || cursoDaDisciplina.getValorBaseDisciplina() == null) {
+                        return 0.0f;
+                    }
+                    return (float) cursoDaDisciplina.getValorBaseDisciplina();
+                })
+                .sum();
+
+        // 2. SELEÇÃO DA ESTRATÉGIA (O Contexto decide qual algoritmo usar)
+        CalculoMensalidadeStrategy strategy;
+
+        Float bolsaPorcentagem = aluno.getBolsaPorcentagem();
+
+        if (bolsaPorcentagem != null && bolsaPorcentagem > 0.0f) {
+            strategy = comBolsaStrategy; // Estratégia de desconto
+        } else {
+            strategy = semBolsaStrategy; // Estratégia sem desconto
+        }
+
+        // 3. APLICAÇÃO DA ESTRATÉGIA SELECIONADA
+        return strategy.aplicarDesconto(valorBase, bolsaPorcentagem);
     }
 }
